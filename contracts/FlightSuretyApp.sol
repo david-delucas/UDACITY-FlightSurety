@@ -5,6 +5,7 @@ pragma solidity ^0.4.25;
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./FlightSuretyData.sol";
 
 /************************************************** */
 /* FlightSurety Smart Contract                      */
@@ -35,7 +36,11 @@ contract FlightSuretyApp {
     }
     mapping(bytes32 => Flight) private flights;
 
- 
+    FlightSuretyData flightSuretyData;
+    address flightSuretyDataContractAddress;
+
+    event AirlineRegistered(address airlineAddress);
+
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
@@ -48,10 +53,10 @@ contract FlightSuretyApp {
     *      This is used on all state changing functions to pause the contract in 
     *      the event there is an issue that needs to be fixed
     */
-    modifier requireIsOperational() 
+    modifier requireIsOperational()
     {
          // Modify to call data contract's status
-        require(operational, "Contract is currently not operational");  
+        require(operational, "Contract is currently not operational");
         _;  // All modifiers require an "_" which indicates where the function body will be added
     }
 
@@ -64,6 +69,20 @@ contract FlightSuretyApp {
         _;
     }
 
+
+    modifier onlyRegisteredAirlines()
+    {
+        require(flightSuretyData.isRegistered(msg.sender), "Only registered allowed");
+        _;
+    }
+
+    modifier onlyPaidAirlines()
+    {
+        require(flightSuretyData.isPaid(msg.sender), "Only paid airlines allowed");
+        _;
+    }
+
+
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
@@ -74,10 +93,16 @@ contract FlightSuretyApp {
     */
     constructor
                                 (
+                                    address dataContractAddress
                                 ) 
                                 public 
     {
         contractOwner = msg.sender;
+        operational = true;
+
+        flightSuretyData = FlightSuretyData(dataContractAddress);
+
+
     }
 
     /********************************************************************************************/
@@ -86,11 +111,17 @@ contract FlightSuretyApp {
 
     function isOperational() 
                             public 
-                            pure 
+                            view
                             returns(bool) 
     {
         return operational;  // Modify to call data contract's status
     }
+
+    function setOperatingStatus (bool mode) external requireContractOwner
+    {
+        operational = mode;
+    }
+
 
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
@@ -102,12 +133,17 @@ contract FlightSuretyApp {
     *
     */   
     function registerAirline
-                            (   
+                            (address _address
                             )
                             external
-                            pure
+                            payable
+                            requireIsOperational
                             returns(bool success, uint256 votes)
     {
+
+        flightSuretyData.registerAirline(_address, 0);
+        emit AirlineRegistered(_address);
+
         return (success, 0);
     }
 
@@ -334,5 +370,6 @@ contract FlightSuretyApp {
     }
 
 // endregion
+
 
 }   

@@ -10,24 +10,53 @@ contract FlightSuretyData {
     /********************************************************************************************/
 
     address private contractOwner;                                      // Account used to deploy contract
-    bool private operational = true;                                    // Blocks all state changes throughout the contract if false
+    address private contractApp;
+    bool private operational;                                    // Blocks all state changes throughout the contract if false
+    mapping(address => bool) private authorizedCallers;
 
+    struct Flight {
+        bool isRegistered;
+        uint8 statusCode;
+        uint256 updatedTimestamp;
+        address airline;
+        address [] insured;
+    }
+
+    struct Passenger {
+        bool isRegistered;
+        mapping (bytes32 => uint) insuranceValue;
+        uint balance;
+    }
+
+    mapping(address => Passenger) private passengers;
+    mapping(bytes32 => Flight) public flights;
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
-
+    event AirlineAdded(address indexed account);
+    event AirlineStatusChanged(address indexed account);
 
     /**
     * @dev Constructor
     *      The deploying account becomes contractOwner
     */
     constructor
-                                (
-                                ) 
-                                public 
+    (
+    )
+
+    public
     {
         contractOwner = msg.sender;
+        airlines[contractOwner] = Airline(contractOwner, AirlineState.Paid, "First Airline", 0);
+        totalPaidAirlines++;
+        operational = true;
+
     }
+
+    function authorizeCaller(address _appContractOwner) external requireIsOperational requireContractOwner {
+        contractOwner = _appContractOwner;
+    }
+
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -55,6 +84,19 @@ contract FlightSuretyData {
         require(msg.sender == contractOwner, "Caller is not contract owner");
         _;
     }
+
+    modifier requireIsCallerAuthorized()
+    {
+        require(msg.sender == contractApp, "Caller is not authorized");
+        _;
+    }
+
+    modifier requireCallerAuthorized()
+    {
+        require(authorizedCallers[msg.sender] || (msg.sender == contractOwner), "Caller is not authorised");
+        _;
+    }
+
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
@@ -93,17 +135,150 @@ contract FlightSuretyData {
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
+
+    enum AirlineState {
+        Applied,
+        Registered,
+        Paid
+    }
+
+    struct Airline {
+        address airlineAddress;
+        AirlineState state;
+        string name;
+
+        mapping(address => bool) approvals;
+        uint8 approvalCount;
+    }
+
+    mapping(address => Airline) internal airlines;
+    uint256 internal totalPaidAirlines = 0;
+
+    function getAirlineState(address airline)
+    external
+    view
+    requireCallerAuthorized
+    returns (AirlineState)
+    {
+        return airlines[airline].state;
+    }
+
+
+    function setAirlaneStatus(address account, AirlineState mode) internal{
+        airlines[account].state = mode;
+        if(mode == AirlineState.Paid) totalPaidAirlines += 1;
+        else totalPaidAirlines -= 1;
+        emit AirlineStatusChanged(account);
+    }
+
+
+
+    function isActive(address airline) public view returns (bool) {
+        return airlines[airline].state  == AirlineState.Registered;
+    }
+
+
+    function isRegistered(address airline) public view returns (bool) {
+        return airlines[airline].state  == AirlineState.Registered;
+    }
+
+    function isPaid(address airline) public view returns (bool) {
+        return airlines[airline].state  == AirlineState.Paid;
+    }
+
+    function addAirline(address account) internal {
+        airlines[account].airlineAddress=account;
+        emit AirlineAdded(account);
+    }
+
+    // Define a function 'addAirline' that adds this role
+    function addAirline(address account, address origin) public {
+        require(isAirline(origin), "Only Airlines");
+        addAirline(account);
+    }
+
+
+    // Define a function 'isAirline' to check this role
+    function isAirline(address account) public view returns (bool) {
+        return airlines[account].airlineAddress > 0;
+    }
+
+    address[] multiCalls = new address[](0);
    /**
     * @dev Add an airline to the registration queue
     *      Can only be called from FlightSuretyApp contract
     *
     */   
     function registerAirline
-                            (   
-                            )
-                            external
-                            pure
+    (
+        address newAirlines,
+        address oldAirlines
+    )
+    external
+    requireIsOperational
+    requireIsCallerAuthorized
+    returns (bool success, uint256 votes)
     {
+        require(isAirline(oldAirlines), "Caller is not an Airline");
+        require(isActive(oldAirlines), "Caller is not an active Airline");
+        if (totalPaidAirlines < 4) {
+            addAirline(newAirlines, oldAirlines);
+            return (true, 0);
+        } else {
+            bool isDuplicate = false;
+            uint M = totalPaidAirlines / 2;
+            for (uint c = 0; c < multiCalls.length; c++) {
+                if (multiCalls[c] == oldAirlines) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+            require(!isDuplicate, "Airline has already called this function.");
+
+            multiCalls.push(oldAirlines);
+            if (multiCalls.length >= M) {
+                addAirline(newAirlines, oldAirlines);
+                votes = multiCalls.length;
+                multiCalls = new address[](0);
+                return (true, votes);
+            }
+
+        }
+
+        return (false, 0);
+    }
+
+    function activateAirline(address account, AirlineState mode)
+    requireIsOperational
+    requireIsCallerAuthorized
+    returns (bool success){
+        require(isAirline(account), "Caller is not an Airline");
+        setAirlaneStatus(account, mode);
+        return (true);
+    }
+
+    function registerFlight
+    (
+        address _airline,
+        string _flight,
+        uint256 _timestamp
+    )
+    external
+    requireIsOperational
+    requireIsCallerAuthorized
+    {
+        require(isAirline(_airline), "Caller is not an Airline");
+        require(isActive(_airline), "Caller is not an active Airline");
+        bytes32 _key = getFlightKey(_airline, _flight);
+        flights[_key] = Flight(
+            {
+            isRegistered : true,
+            statusCode : 0,
+            updatedTimestamp : _timestamp,
+            airline : _airline,
+            insured : new address[](0)
+            }
+        );
     }
 
 
@@ -160,14 +335,15 @@ contract FlightSuretyData {
     function getFlightKey
                         (
                             address airline,
-                            string memory flight,
-                            uint256 timestamp
+                            string memory flight/*,
+                            uint256 timestamp*/
                         )
-                        pure
+                        view
                         internal
+			requireIsOperational
                         returns(bytes32) 
     {
-        return keccak256(abi.encodePacked(airline, flight, timestamp));
+        return keccak256(abi.encodePacked(airline, flight/*, timestamp*/));
     }
 
     /**
