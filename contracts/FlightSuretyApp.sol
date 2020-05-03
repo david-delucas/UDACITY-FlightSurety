@@ -127,24 +127,23 @@ contract FlightSuretyApp {
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
-  
    /**
     * @dev Add an airline to the registration queue
     *
-    */   
+    */
     function registerAirline
                             (address _address
                             )
                             external
                             payable
                             requireIsOperational
-                            returns(bool success, uint256 votes)
+                            returns(bool success, uint256 votes, uint256 totalPaidAirlines)
     {
 
-        flightSuretyData.registerAirline(_address, 0);
+        (success, votes, totalPaidAirlines) = flightSuretyData.registerAirline(_address, msg.sender);
         emit AirlineRegistered(_address);
 
-        return (success, 0);
+        return (success, votes, totalPaidAirlines);
     }
 
 

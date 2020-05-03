@@ -35,26 +35,27 @@ contract FlightSuretyData {
     /********************************************************************************************/
     event AirlineAdded(address indexed account);
     event AirlineStatusChanged(address indexed account);
+    event AirlineRemoved(address indexed account);
+
 
     /**
     * @dev Constructor
     *      The deploying account becomes contractOwner
     */
     constructor
-    (
+    (address firstAirline
     )
 
     public
     {
         contractOwner = msg.sender;
-        airlines[contractOwner] = Airline(contractOwner, AirlineState.Paid, "First Airline", 0);
+        airlines[firstAirline] = Airline(firstAirline, AirlineState.Paid, "First Airline", 0);
         totalPaidAirlines++;
         operational = true;
-
     }
 
     function authorizeCaller(address _appContractOwner) external requireIsOperational requireContractOwner {
-        contractOwner = _appContractOwner;
+        contractApp = _appContractOwner;
     }
 
 
@@ -124,11 +125,11 @@ contract FlightSuretyData {
     function setOperatingStatus
                             (
                                 bool mode
-                            ) 
+                            )
                             external
-                            requireContractOwner 
+                            requireContractOwner
     {
-        operational = mode;
+        operational = mode;        
     }
 
     /********************************************************************************************/
@@ -174,7 +175,10 @@ contract FlightSuretyData {
 
 
     function isActive(address airline) public view returns (bool) {
-        return airlines[airline].state  == AirlineState.Registered;
+        return (
+            airlines[airline].state  == AirlineState.Registered ||
+            airlines[airline].state  == AirlineState.Paid
+        );
     }
 
 
@@ -188,6 +192,8 @@ contract FlightSuretyData {
 
     function addAirline(address account) internal {
         airlines[account].airlineAddress=account;
+        airlines[account].state=AirlineState.Registered;
+        airlines[account].name="Dummy Name for Airline";
         emit AirlineAdded(account);
     }
 
@@ -200,7 +206,7 @@ contract FlightSuretyData {
 
     // Define a function 'isAirline' to check this role
     function isAirline(address account) public view returns (bool) {
-        return airlines[account].airlineAddress > 0;
+        return airlines[account].state == AirlineState.Paid ;
     }
 
     address[] multiCalls = new address[](0);
@@ -208,44 +214,43 @@ contract FlightSuretyData {
     * @dev Add an airline to the registration queue
     *      Can only be called from FlightSuretyApp contract
     *
-    */   
+    */
     function registerAirline
     (
-        address newAirlines,
-        address oldAirlines
+        address newAirline,
+        address callerAirline
     )
     external
     requireIsOperational
     requireIsCallerAuthorized
-    returns (bool success, uint256 votes)
+    returns (bool success, uint256 votes, uint256 totalPaidAirlines)
     {
-        require(isAirline(oldAirlines), "Caller is not an Airline");
-        require(isActive(oldAirlines), "Caller is not an active Airline");
+        require(isAirline(callerAirline), "Caller is not an Airline");
+        require(isActive(callerAirline), "Caller is not an active Airline");
         if (totalPaidAirlines < 4) {
-            addAirline(newAirlines, oldAirlines);
-            return (true, 0);
+            addAirline(newAirline, callerAirline);
+            return (true, 0, totalPaidAirlines);
         } else {
             bool isDuplicate = false;
             uint M = totalPaidAirlines / 2;
             for (uint c = 0; c < multiCalls.length; c++) {
-                if (multiCalls[c] == oldAirlines) {
+                if (multiCalls[c] == callerAirline) {
                     isDuplicate = true;
                     break;
                 }
             }
             require(!isDuplicate, "Airline has already called this function.");
 
-            multiCalls.push(oldAirlines);
+            multiCalls.push(callerAirline);
             if (multiCalls.length >= M) {
-                addAirline(newAirlines, oldAirlines);
+                addAirline(newAirline, callerAirline);
                 votes = multiCalls.length;
                 multiCalls = new address[](0);
-                return (true, votes);
+                return (true, votes, totalPaidAirlines);
             }
-
         }
 
-        return (false, 0);
+        return (false, 0, totalPaidAirlines);
     }
 
     function activateAirline(address account, AirlineState mode)
@@ -287,7 +292,7 @@ contract FlightSuretyData {
     *
     */   
     function buy
-                            (                             
+                            (
                             )
                             external
                             payable
