@@ -227,6 +227,7 @@ contract FlightSuretyData {
     {
         require(isAirline(callerAirline), "Caller is not an Airline");
         require(isActive(callerAirline), "Caller is not an active Airline");
+        require(!isAirline(newAirline), "New Airline is already registered");
         if (totalPaidAirlines < 4) {
             addAirline(newAirline, callerAirline);
             return (true, 0, totalPaidAirlines);

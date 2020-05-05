@@ -17,6 +17,24 @@ import './flightsurety.css';
         });
     
 
+        DOM.elid('register-airline').addEventListener('click', () => {
+            let airline = DOM.elid('airline-address').value;
+            contract.registerAirline(airline,(error, result) => {
+                alert("Airline was successfully registered.");
+   	        DOM.elid('airline-address').value = "";
+		let el = document.createElement("option");
+		el.text = airline;
+		el.value = airline;
+		DOM.elid("airlines").add(el);
+
+            });
+
+        });
+
+        DOM.elid('airlines').addEventListener('change', () => {
+            return contract.airlines;
+        });
+
         // User-submitted transaction
         DOM.elid('submit-oracle').addEventListener('click', () => {
             let flight = DOM.elid('flight-number').value;

@@ -99,10 +99,7 @@ contract FlightSuretyApp {
     {
         contractOwner = msg.sender;
         operational = true;
-
         flightSuretyData = FlightSuretyData(dataContractAddress);
-
-
     }
 
     /********************************************************************************************/
@@ -139,18 +136,15 @@ contract FlightSuretyApp {
                             requireIsOperational
                             returns(bool success, uint256 votes, uint256 totalPaidAirlines)
     {
-
         (success, votes, totalPaidAirlines) = flightSuretyData.registerAirline(_address, msg.sender);
         emit AirlineRegistered(_address);
-
         return (success, votes, totalPaidAirlines);
     }
-
 
    /**
     * @dev Register a future flight for insuring.
     *
-    */  
+    */
     function registerFlight
                                 (
                                 )
@@ -159,7 +153,7 @@ contract FlightSuretyApp {
     {
 
     }
-    
+
    /**
     * @dev Called after oracle has updated flight status
     *

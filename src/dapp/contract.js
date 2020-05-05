@@ -7,10 +7,11 @@ export default class Contract {
 
         let config = Config[network];
         this.web3 = new Web3(new Web3.providers.HttpProvider(config.url));
-        this.flightSuretyApp = new this.web3.eth.Contract(FlightSuretyApp.abi, config.appAddress);
+        this.flightSuretyApp = new this.web3.eth.Contract(FlightSuretyApp.abi, config.appAddress, config.dataAddress);
         this.initialize(callback);
         this.owner = null;
         this.airlines = [];
+        this.flights = [];
         this.passengers = [];
     }
 
@@ -39,6 +40,14 @@ export default class Contract {
             .isOperational()
             .call({ from: self.owner}, callback);
     }
+
+    async registerAirline(airline, callback){
+        let self = this;
+        await self.flightSuretyApp.methods.registerAirline(airline).send({ from: self.owner}, (error, result) => {
+                callback(error, result);
+            });
+    }
+
 
     fetchFlightStatus(flight, callback) {
         let self = this;
