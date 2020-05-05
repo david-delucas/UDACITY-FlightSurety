@@ -14,6 +14,9 @@ contract FlightSuretyData {
     bool private operational;                                    // Blocks all state changes throughout the contract if false
     mapping(address => bool) private authorizedCallers;
 
+    // the contract level funds (not allocated to individual airlines)
+    uint256 private contractFunds = 0 ether;
+
     struct Flight {
         bool isRegistered;
         uint8 statusCode;
@@ -36,6 +39,7 @@ contract FlightSuretyData {
     event AirlineAdded(address indexed account);
     event AirlineStatusChanged(address indexed account);
     event AirlineRemoved(address indexed account);
+    event MultiCallStatusChanged(address indexed account);
 
 
     /**
@@ -49,8 +53,7 @@ contract FlightSuretyData {
     public
     {
         contractOwner = msg.sender;
-        airlines[firstAirline] = Airline(firstAirline, AirlineState.Paid, "First Airline", 0);
-        totalPaidAirlines++;
+        airlines[firstAirline] = Airline(firstAirline, AirlineState.Registered, "First Airline", 0, 0);
         operational = true;
     }
 
@@ -147,7 +150,7 @@ contract FlightSuretyData {
         address airlineAddress;
         AirlineState state;
         string name;
-
+        uint256 funds;
         mapping(address => bool) approvals;
         uint8 approvalCount;
     }
@@ -163,6 +166,17 @@ contract FlightSuretyData {
     {
         return airlines[airline].state;
     }
+
+
+    function getTotalPaidAirlines()
+    external
+    view
+    requireCallerAuthorized
+    returns (uint256)
+    {
+        return totalPaidAirlines;
+    }
+
 
 
     function setAirlaneStatus(address account, AirlineState mode) internal{
@@ -183,33 +197,48 @@ contract FlightSuretyData {
 
 
     function isRegistered(address airline) public view returns (bool) {
-        return airlines[airline].state  == AirlineState.Registered;
+            airlines[airline].state  == AirlineState.Registered;
     }
 
     function isPaid(address airline) public view returns (bool) {
         return airlines[airline].state  == AirlineState.Paid;
     }
 
-    function addAirline(address account) internal {
+    function addAirline(address account, string memory name) internal {
         airlines[account].airlineAddress=account;
         airlines[account].state=AirlineState.Registered;
-        airlines[account].name="Dummy Name for Airline";
+        airlines[account].name=name;
         emit AirlineAdded(account);
     }
 
     // Define a function 'addAirline' that adds this role
-    function addAirline(address account, address origin) public {
+    function addAirline(address account, address origin, string memory name) public {
         require(isAirline(origin), "Only Airlines");
-        addAirline(account);
+        addAirline(account,name);
     }
 
 
     // Define a function 'isAirline' to check this role
     function isAirline(address account) public view returns (bool) {
-        return airlines[account].state == AirlineState.Paid ;
+        return airlines[account].airlineAddress > 0 ;
     }
 
     address[] multiCalls = new address[](0);
+
+    function getMultiCallsCount()
+    internal
+    returns (uint256)
+    {
+        return multiCalls.length;
+    }
+
+
+    function pushToMultiCalls(address account) internal{
+        multiCalls.push(account);    
+        emit MultiCallStatusChanged(account);
+    }
+
+
    /**
     * @dev Add an airline to the registration queue
     *      Can only be called from FlightSuretyApp contract
@@ -218,22 +247,24 @@ contract FlightSuretyData {
     function registerAirline
     (
         address newAirline,
-        address callerAirline
+        address callerAirline,
+        string name
     )
     external
     requireIsOperational
     requireIsCallerAuthorized
-    returns (bool success, uint256 votes, uint256 totalPaidAirlines)
+    returns (bool success, uint256 votes, uint256 _totalPaidAirlines, uint256 Majority) 
     {
         require(isAirline(callerAirline), "Caller is not an Airline");
         require(isActive(callerAirline), "Caller is not an active Airline");
+        require(isPaid(callerAirline), "Caller is not a funded Airline");
         require(!isAirline(newAirline), "New Airline is already registered");
         if (totalPaidAirlines < 4) {
-            addAirline(newAirline, callerAirline);
-            return (true, 0, totalPaidAirlines);
+            addAirline(newAirline, callerAirline, name);
+            return (true, 0, totalPaidAirlines, 0);
         } else {
             bool isDuplicate = false;
-            uint M = totalPaidAirlines / 2;
+            Majority = totalPaidAirlines.div(2);
             for (uint c = 0; c < multiCalls.length; c++) {
                 if (multiCalls[c] == callerAirline) {
                     isDuplicate = true;
@@ -241,18 +272,47 @@ contract FlightSuretyData {
                 }
             }
             require(!isDuplicate, "Airline has already called this function.");
-
-            multiCalls.push(callerAirline);
-            if (multiCalls.length >= M) {
-                addAirline(newAirline, callerAirline);
-                votes = multiCalls.length;
+            pushToMultiCalls(callerAirline);
+            //multiCalls.push(callerAirline);
+            if (multiCalls.length >= Majority) {
+                addAirline(newAirline, callerAirline, name);
                 multiCalls = new address[](0);
-                return (true, votes, totalPaidAirlines);
+                return (true, votes, totalPaidAirlines, Majority);
             }
         }
-
-        return (false, 0, totalPaidAirlines);
+        votes = getMultiCallsCount();
+        return (false, votes, totalPaidAirlines, Majority);
     }
+
+/*
+        require(flightSuretyData.isAirlineRegistered(msg.sender), "Caller is not a registered.");
+        require(flightSuretyData.isAirlineFunded(msg.sender), "Airline is not funded.");
+        require(!flightSuretyData.isAirlineRegistered(_airline), "Airline is already a registered.");
+
+        uint noOfRegisteredAirlines = flightSuretyData.getNoOfRegisteredAirlines();
+        
+        if (noOfRegisteredAirlines >= M) {
+            bool isDuplicate = false;
+            for (uint c = 0; c < flightSuretyData.getMultiCallsLength(); c++) {
+                if (flightSuretyData.getMultiCallsItem(c) == msg.sender) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+            require(!isDuplicate, "Caller has already called this function.");
+
+            flightSuretyData.setMultiCallsItem(msg.sender);
+
+            if (flightSuretyData.getMultiCallsLength() >= noOfRegisteredAirlines.div(2)) {// 50%
+                flightSuretyData.clearMultiCalls();
+                flightSuretyData.registerAirline(_airline);
+            }
+        } else {
+            flightSuretyData.registerAirline(_airline);
+        }
+
+        return (success, 0);
+*/
 
     function activateAirline(address account, AirlineState mode)
     requireIsOperational
@@ -332,11 +392,19 @@ contract FlightSuretyData {
     */   
     function fund
                             (   
+                              address _airline,
+                              uint256 _fund  
                             )
                             public
                             payable
+                            requireIsOperational
     {
+        airlines[_airline].funds = airlines[_airline].funds.add(_fund);
+        if (airlines[_airline].funds >= 10 ) {
+            setAirlaneStatus(_airline, AirlineState.Paid);
+        }
     }
+
 
     function getFlightKey
                         (
@@ -360,7 +428,7 @@ contract FlightSuretyData {
                             external 
                             payable 
     {
-        fund();
+        contractFunds = contractFunds.add(msg.value);
     }
 
 

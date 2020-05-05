@@ -31,6 +31,7 @@ contract FlightSuretyApp {
     struct Flight {
         bool isRegistered;
         uint8 statusCode;
+        string flight;
         uint256 updatedTimestamp;        
         address airline;
     }
@@ -40,6 +41,7 @@ contract FlightSuretyApp {
     address flightSuretyDataContractAddress;
 
     event AirlineRegistered(address airlineAddress);
+    event AirlineFunded(address airlineAddress);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -129,17 +131,29 @@ contract FlightSuretyApp {
     *
     */
     function registerAirline
-                            (address _address
+                            (address _address, string _name
                             )
                             external
                             payable
                             requireIsOperational
-                            returns(bool success, uint256 votes, uint256 totalPaidAirlines)
+                            returns(bool success, uint256 votes, uint256 totalPaidAirlines, uint256 Majority)
     {
-        (success, votes, totalPaidAirlines) = flightSuretyData.registerAirline(_address, msg.sender);
+        (success, votes, totalPaidAirlines, Majority) = flightSuretyData.registerAirline(_address, msg.sender, _name);
         emit AirlineRegistered(_address);
-        return (success, votes, totalPaidAirlines);
+        return (success, votes, totalPaidAirlines, Majority);
     }
+
+    function fundAirline(
+                        address _airline
+                        ) 
+                        external 
+                        payable 
+                        requireIsOperational
+    {
+        flightSuretyData.fund(_airline, msg.value);
+        emit AirlineFunded(_airline);
+    }
+
 
    /**
     * @dev Register a future flight for insuring.
@@ -147,10 +161,17 @@ contract FlightSuretyApp {
     */
     function registerFlight
                                 (
+                                    address _airline,
+				                    uint256 _time,
+                                    string _flight
+
                                 )
-                                external
-                                pure
+                                public
+                                requireIsOperational
     {
+        bytes32 key = getFlightKey(_airline, _flight, _time);
+        require(flights[key].isRegistered == false, "Cannot register duplicate flights");
+        flights[key] = Flight({isRegistered : true, statusCode : STATUS_CODE_UNKNOWN, updatedTimestamp : _time, airline : _airline, flight : _flight});
 
     }
 

@@ -71,6 +71,29 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
+  it('(airline) Fund the first airline', async () => {
+    
+    // ARRANGE
+    let firstAirline = accounts[1];
+    let funds = new BigNumber(10).pow(18);
+    // ACT
+    try {        
+        await config.flightSuretyApp.fundAirline(config.firstAirline, {from: config.firstAirline, value: funds});
+    }
+    catch(e) {
+
+    }
+
+    let result = await config.flightSuretyData.isPaid.call(config.firstAirline);
+
+    // ASSERT
+    assert.equal(result, true, "First airline should be funded");
+
+  });
+
+
+  
+
   it('(airline) cannot register an Airline using registerAirline() if it is not funded', async () => {
     
     // ARRANGE
@@ -78,17 +101,46 @@ contract('Flight Surety Tests', async (accounts) => {
 
     // ACT
     try {
-        await config.flightSuretyApp.registerAirline(newAirline, {from: config.firstAirline});
+        await config.flightSuretyApp.registerAirline(newAirline, "Airline 1", {from: config.firstAirline});
     }
     catch(e) {
 
     }
-    let result = await config.flightSuretyData.isAirline.call(newAirline);
+
+    let newAirline2 = accounts[3];
+    try {
+        await config.flightSuretyApp.registerAirline(newAirline2, "Airline 2", {from: newAirline});
+    }
+    catch(e) {
+
+    }
+
+    let result = await config.flightSuretyData.isAirline.call(newAirline2);
 
     // ASSERT
     assert.equal(result, false, "Airline should not be able to register another airline if it hasn't provided funding");
 
   });
+
+
+  it('(airline) cannot register 2 times the same Airline using registerAirline()', async () => {
+    
+    // ARRANGE
+    let newAirline = accounts[2];
+    let result = true; 
+    // ACT
+    try {
+        let state = await config.flightSuretyApp.registerAirline(newAirline, "Airline 1", {from: config.firstAirline});
+    }
+    catch(e) {
+        result = false;
+    }
+
+    // ASSERT
+    assert.equal(result, false, "Airline should not be able to register 2 times the same Airline ");
+
+  });
+
 
   it('(airline) the first Airline is registered and funded', async () => {
     let state = await config.flightSuretyData.isPaid(config.firstAirline);
@@ -98,35 +150,85 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
-  it('(airline) the first Airline can register only 3 more airlines but not funded', async () => {
+  it('(airline) the first Airline can register by itself only 3 more funded airlines', async () => {
+    // 2ND" AIRLINE
     let newAirline2 = accounts[3];
-    let state2 = await config.flightSuretyApp.registerAirline.call(newAirline2, {from: config.firstAirline});
-    //console.log(state2.totalPaidAirlines);
+    let funds = new BigNumber(10).pow(18);
+    let state2 = await config.flightSuretyApp.registerAirline.call(newAirline2, "2nd airline", {from: config.firstAirline});
     // ASSERT
-    assert.equal(state2.success, true, "first Airline should be able to register 1st airline");
+    assert.equal(state2.success, true, "first Airline should be able to register 2nd airline");
+    assert.equal(state2.totalPaidAirlines.toNumber(), 1, "total number of funded / paid airlines should be 1");
 
+    await config.flightSuretyApp.fundAirline(newAirline2, {from: newAirline2, value: funds});
+    let paid2 = await config.flightSuretyData.isPaid(newAirline2);
+    // ASSERT
+    assert.equal(paid2, true, "2nd airline should be funded airline");
+
+    // 3RD AIRLINE
     let newAirline3 = accounts[4];
-    let state3 = await config.flightSuretyApp.registerAirline.call(newAirline3, {from: config.firstAirline});
-    //console.log(state3.totalPaidAirlines);
+    let state3 = await config.flightSuretyApp.registerAirline.call(newAirline3, "3rd airline", {from: config.firstAirline});
     // ASSERT
-    assert.equal(state3.success, true, "first Airline should be able to register 2nd");
+    assert.equal(state3.success, true, "first Airline should be able to register 3rd airline");
+    let totalPaidAirln = await config.flightSuretyData.getTotalPaidAirlines();
+    assert.equal(totalPaidAirln, 2, "total number of funded / paid airlines should be 2");
+    let multicallsCnt = state3.votes.toNumber();
+    assert.equal(multicallsCnt, 0, "total number of multicalls should be 0");
 
+    await config.flightSuretyApp.fundAirline(newAirline3, {from: newAirline3, value: funds});
+    let paid3 = await config.flightSuretyData.isPaid(newAirline3);
+    // ASSERT
+    assert.equal(paid3, true, "3rd airline should be funded airline");
+
+    // 4TH AIRLINE
     let newAirline4 = accounts[5];
-    let state4 = await config.flightSuretyApp.registerAirline.call(newAirline4, {from: config.firstAirline});
-    //console.log(state4.totalPaidAirlines);
+    let state4 = await config.flightSuretyApp.registerAirline.call(newAirline4, "4th airline", {from: config.firstAirline});
     // ASSERT
-    assert.equal(state4.success, true, "first Airline should be able to register 3rd airline");
+    assert.equal(state4.success, true, "first Airline should be able to register 4th airline");
+    totalPaidAirln = await config.flightSuretyData.getTotalPaidAirlines();
+    assert.equal(totalPaidAirln, 3, "total number of funded / paid airlines should be 3");
+    multicallsCnt = state4.votes.toNumber();
+    assert.equal(multicallsCnt, 0, "total number of multicalls should be 0");
 
+    await config.flightSuretyApp.fundAirline(newAirline4, {from: newAirline4, value: funds});
+    let paid4 = await config.flightSuretyData.isPaid(newAirline4);
+    // ASSERT
+    assert.equal(paid4, true, "4th airline should be funded airline");
+
+    // 5TH AIRLINE
     let newAirline5 = accounts[6];
-    let state5 = await config.flightSuretyApp.registerAirline.call(newAirline5, {from: config.firstAirline});
-    //console.log(state5.totalPaidAirlines);
+    let state5 = await config.flightSuretyApp.registerAirline.call(newAirline5, "Dummy 1", {from: config.firstAirline});
+    assert.equal(state5.success, false, "first Airline shouldn't be able to register 5th airline, require multiparty consensus");
+    assert.equal(state5.totalPaidAirlines.toNumber(), 4, "total number of funded / paid airlines should be 4");
+    //console.log(state5.votes.toNumber())
+    //console.log(state5.Majority.toNumber())
     // ASSERT
-    //assert.equal(state5.success, false, "first Airline shouldn't be able to register 4th airline");
+    totalPaidAirln = await config.flightSuretyData.getTotalPaidAirlines();
+    assert.equal(totalPaidAirln, 4, "total number of funded / paid airlines should be 4");
+    multicallsCnt = state5.votes.toNumber();
+    assert.equal(multicallsCnt, 1, "total number of multicalls should be 1");
 
-    let state6 = await config.flightSuretyApp.registerAirline.call(newAirline3, {from: config.firstAirline});
-    //console.log(state5.totalPaidAirlines);
-    // ASSERT
-    //assert.equal(state6.success, false, "first Airline shouldn't be able to register 2 times 2nd airline");
+    });
 
-});
+    it(`(multiparty) Registration of fifth and subsequent airlines requires multi-party consensus of 50% of registered airlines`, async function () {
+
+        // 5TH AIRLINE
+        let newAirline5 = accounts[6];
+        let state5 = await config.flightSuretyApp.registerAirline.call(newAirline5, "Dummy 1", {from: config.firstAirline});
+        assert.equal(state5.success, false, "duplicated votes not allowed to register 5th airline, require multiparty consensus");
+        assert.equal(state5.totalPaidAirlines.toNumber(), 4, "total number of funded / paid airlines should be 4");
+        //console.log(state5.votes.toNumber())
+        //console.log(state5.Majority.toNumber())
+        // ASSERT
+        totalPaidAirln = await config.flightSuretyData.getTotalPaidAirlines();
+        assert.equal(totalPaidAirln, 4, "total number of funded / paid airlines should be 4");
+        multicallsCnt = state5.votes.toNumber();
+        assert.equal(multicallsCnt, 1, "total number of multicalls should be 1");
+
+        
+
+
+    });
+  
+
+    
 });
