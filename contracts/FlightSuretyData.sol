@@ -53,7 +53,7 @@ contract FlightSuretyData {
     public
     {
         contractOwner = msg.sender;
-        airlines[firstAirline] = Airline(firstAirline, AIRLINE_STATE_REGISTERED, "First Airline", 0, new address[](0), 0);
+        airlines[firstAirline] = Airline(firstAirline, AIRLINE_STATE_REGISTERED, "First Airline", 0);
         operational = true;
     }
 
@@ -156,12 +156,14 @@ contract FlightSuretyData {
         uint state;
         string name;
         uint256 funds;
-        address[] approvals;
-        uint approvalsCount;
     }
 
     mapping(address => Airline) internal airlines;
     uint internal totalPaidAirlines = 0;
+
+    address[] internal approvals = new address[](0);
+    uint internal approvalsCount = 0;
+
 
     function getAirlineState(address airline)
     external
@@ -172,6 +174,13 @@ contract FlightSuretyData {
         return airlines[airline].state;
     }
 
+    function getAirlineStateInt(address airline)
+    internal
+    view
+    returns (uint)
+    {
+        return airlines[airline].state;
+    }
 
     function getTotalPaidAirlines()
     external
@@ -211,7 +220,7 @@ contract FlightSuretyData {
     }
 
     function addAirline(address account, string memory name) internal {
-        airlines[account] = Airline(account, AIRLINE_STATE_REGISTERED, name, 0, new address[](0), 0);
+        airlines[account] = Airline(account, AIRLINE_STATE_REGISTERED, name, 0);
         emit AirlineAdded(account);
     }
 
@@ -236,20 +245,21 @@ contract FlightSuretyData {
     view
     returns (uint)
     {
-        return airlines[account].approvalsCount;
+        return approvalsCount;
     }
 
 
     function pushToMultiCalls(address account, address callerAccount,string memory name) internal {
         if ( isAirline(account) ) {
-            airlines[account].approvals.push(callerAccount);
-            airlines[account].approvalsCount += 1;
-            emit MultiCallStatusChanged(account);
+            approvals.push(callerAccount);
+            approvalsCount += 1;
+            //emit MultiCallStatusChanged(account);
             //return 1;
         } else {
-            airlines[account] = Airline(account, 111111 + AIRLINE_STATE_APPLIED, name, 0, new address[](0), 1);
-            airlines[account].approvals.push(callerAccount);
-            emit AirlineAdded(account);
+            airlines[account] = Airline(account, AIRLINE_STATE_APPLIED, name, 0);
+            approvals.push(callerAccount);
+            approvalsCount = 1;
+            //emit AirlineAdded(account);
             //return 2;
         }
     }
@@ -272,7 +282,6 @@ contract FlightSuretyData {
     returns (bool success, uint256 votes, uint _totalPaidAirlines, uint256 Majority, uint exist) 
     {
         uint _exist = 0;
-        uint _exist2 = 0;
         //require(isAirline(callerAirline), "Caller is not an Airline");
         require(isActive(callerAirline), "Caller is not an active Airline");
         require(isPaid(callerAirline), "Caller is not a funded Airline");
@@ -283,25 +292,24 @@ contract FlightSuretyData {
         } else {
             bool isDuplicate = false;
             Majority = totalPaidAirlines.div(2);
+            _exist =getAirlineStateInt(newAirline);
             if (isAirline(newAirline)) {
-                _exist +=airlines[callerAirline].state;
-                _exist +=airlines[newAirline].state;
+                _exist =getAirlineStateInt(newAirline);
             }
             for (uint c = 0; c <  getMultiCallsCount(newAirline); c++) {
-                _exist +=10;
-                if (airlines[newAirline].approvals[c] == callerAirline) {
+                //_exist +=10;
+                if (approvals[c] == callerAirline) {
                     isDuplicate = true;
-                    _exist +=100;
+                    //_exist +=100;
                     break;
                 }
             }
             require(!isDuplicate, "Airline has already called this function.");
             pushToMultiCalls(newAirline,callerAirline, name);
 
-            if (isAirline(newAirline)) {
-                _exist +=airlines[callerAirline].state;
-                _exist +=airlines[newAirline].state;
-            }
+            /*if (isAirline(newAirline)) {
+                _exist +=getAirlineStateInt(newAirline);
+            }*/
 
 
             votes = getMultiCallsCount(newAirline);            
