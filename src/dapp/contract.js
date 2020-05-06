@@ -41,9 +41,9 @@ export default class Contract {
             .call({ from: self.owner}, callback);
     }
 
-    async registerAirline(airline, callback){
+    async registerAirline(airline,airline_name, callback){
         let self = this;
-        await self.flightSuretyApp.methods.registerAirline(airline).send({ from: self.owner}, (error, result) => {
+        await self.flightSuretyApp.methods.registerAirline(airline,airline_name).send({ from: self.owner}, (error, result) => {
                 callback(error, result);
             });
     }

@@ -364,12 +364,13 @@ contract FlightSuretyData {
             passengers[_passenger].balance = 0;
         }
 
+        /*  uint totalInsured = passengers[passengerKey].amount.add(msg.value);
+            require(totalInsured <= limit, "Total insured cannot exceed insurance limit");
+            passengers[passengerKey].account = passenger;
+            passengers[passengerKey].amount = totalInsured;
+            insureesByFlight[flightKey].push(passenger);*/
            
     }
-
-
-
-
 
 
     /**

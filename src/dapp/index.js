@@ -19,9 +19,11 @@ import './flightsurety.css';
 
         DOM.elid('register-airline').addEventListener('click', () => {
             let airline = DOM.elid('airline-address').value;
-            contract.registerAirline(airline,(error, result) => {
+            let airline_name = DOM.elid('airline-name').value;
+            contract.registerAirline(airline,airline_name,(error, result) => {
                 alert("Airline was successfully registered.");
-   	        DOM.elid('airline-address').value = "";
+               DOM.elid('airline-address').value = "";
+               DOM.elid('airline-name').value = "";
 		let el = document.createElement("option");
 		el.text = airline;
 		el.value = airline;
@@ -37,9 +39,11 @@ import './flightsurety.css';
 
         // User-submitted transaction
         DOM.elid('submit-oracle').addEventListener('click', () => {
+            let airline = DOM.elid('airline-address').value;
             let flight = DOM.elid('flight-number').value;
+            let timestamp = DOM.elid('flight-timestamp').value;
             // Write transaction
-            contract.fetchFlightStatus(flight, (error, result) => {
+            contract.fetchFlightStatus(airline, flight, timestamp, (error, result) => {
                 display('Oracles', 'Trigger oracles', [ { label: 'Fetch Flight Status', error: error, value: result.flight + ' ' + result.timestamp} ]);
             });
         })
