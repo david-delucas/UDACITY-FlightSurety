@@ -11,6 +11,10 @@ To install, download or clone the repo, then:
 `npm install`
 `truffle compile`
 
+Run ganache-cli as follows:
+
+`ganache-cli -l 9999999999999 -g 1 -a 50 -e 10000 -m "candy maple cake sugar pudding cream honey rich smooth crumble sweet eat"`
+
 ## Develop Client
 
 To run truffle tests:

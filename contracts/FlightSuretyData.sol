@@ -27,7 +27,7 @@ contract FlightSuretyData {
 
     struct Passenger {
         bool isRegistered;
-        mapping (bytes32 => uint) insuranceValue;
+        mapping (bytes32 => uint) insuranceAmt; // for each flight
         uint balance;
     }
 
@@ -244,14 +244,12 @@ contract FlightSuretyData {
         if ( isAirline(account) ) {
             airlines[account].approvals.push(callerAccount);
             airlines[account].approvalsCount += 1;
-            //emit MultiCallStatusChanged(account);
-            //return 1;
+            emit MultiCallStatusChanged(account);
         } else {
             airlines[account] = Airline(account, AirlineState.Applied, name, 0, new address[](0),0);
             airlines[account].approvals.push(callerAccount);
             airlines[account].approvalsCount = 1;
-            //emit AirlineAdded(account);
-            //return 2;
+            emit AirlineAdded(account);
         }
     }
 
@@ -338,29 +336,56 @@ contract FlightSuretyData {
         );
     }
 
-
    /**
     * @dev Buy insurance for a flight
     *
     */   
     function buy
                             (
+                            address _passenger,
+                            uint256 _insuranceAmt,
+                            string calldata _flight,
+                            address _airline
                             )
                             external
                             payable
+                            requireIsOperational
     {
+        uint256  max_insurance = 1 ether;
+        require(_insuranceAmt <= max_insurance, "Maximum insurance amount is 1 ether");
+        bytes32 _key = getFlightKey(_airline, _flight);
 
+        if(passengers[_passenger].isRegistered){
+            passengers[_passenger].insuranceAmt[_key] = _insuranceAmt;
+            passengers[_passenger].balance = 0;            
+        } else {
+            passengers[_passenger].isRegistered=true;
+            passengers[_passenger].insuranceAmt[_key] = _insuranceAmt;
+            passengers[_passenger].balance = 0;
+        }
+
+           
     }
+
+
+
+
+
 
     /**
      *  @dev Credits payouts to insurees
     */
     function creditInsurees
                                 (
+                                    address payable _account,
+                                    uint funds
                                 )
-                                external
-                                pure
+                            public
+                            payable
+                            requireIsOperational
     {
+        _account.transfer(funds);
+
     }
     
 
@@ -370,10 +395,16 @@ contract FlightSuretyData {
     */
     function pay
                             (
+                                    address payable _account,
+                                    uint funds
+
                             )
-                            external
-                            pure
+                            public
+                            payable
+                            requireIsOperational
     {
+        _account.transfer(funds);
+
     }
 
    /**
