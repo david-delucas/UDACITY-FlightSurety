@@ -1,4 +1,4 @@
-pragma solidity ^0.4.25;
+pragma solidity ^0.6.0;
 
 // It's important to avoid vulnerabilities due to numeric overflow bugs
 // OpenZeppelin's SafeMath library, when used correctly, protects agains such bugs
@@ -95,7 +95,7 @@ contract FlightSuretyApp {
     */
     constructor
                                 (
-                                    address dataContractAddress
+                                    address payable dataContractAddress
                                 ) 
                                 public 
     {
@@ -131,16 +131,16 @@ contract FlightSuretyApp {
     *
     */
     function registerAirline
-                            (address _address, string _name
+                            (address _address, string  calldata _name
                             )
                             external
                             payable
                             requireIsOperational
-                            returns(bool success, uint256 votes, uint256 totalPaidAirlines, uint256 Majority)
+                            returns(bool success, uint256 votes, uint totalPaidAirlines, uint256 Majority, uint exist)
     {
-        (success, votes, totalPaidAirlines, Majority) = flightSuretyData.registerAirline(_address, msg.sender, _name);
+        (success, votes, totalPaidAirlines, Majority, exist) = flightSuretyData.registerAirline(_address, msg.sender, _name);
         emit AirlineRegistered(_address);
-        return (success, votes, totalPaidAirlines, Majority);
+        return (success, votes, totalPaidAirlines, Majority, exist);
     }
 
     function fundAirline(
@@ -163,7 +163,7 @@ contract FlightSuretyApp {
                                 (
                                     address _airline,
 				                    uint256 _time,
-                                    string _flight
+                                    string  memory _flight
 
                                 )
                                 public
@@ -196,7 +196,7 @@ contract FlightSuretyApp {
     function fetchFlightStatus
                         (
                             address airline,
-                            string flight,
+                            string  calldata flight,
                             uint256 timestamp                            
                         )
                         external
@@ -281,7 +281,7 @@ contract FlightSuretyApp {
                             )
                             view
                             external
-                            returns(uint8[3])
+                            returns(uint8[3] memory )
     {
         require(oracles[msg.sender].isRegistered, "Not registered as an oracle");
 
@@ -299,7 +299,7 @@ contract FlightSuretyApp {
                         (
                             uint8 index,
                             address airline,
-                            string flight,
+                            string calldata flight,
                             uint256 timestamp,
                             uint8 statusCode
                         )
@@ -329,7 +329,7 @@ contract FlightSuretyApp {
     function getFlightKey
                         (
                             address airline,
-                            string flight,
+                            string memory flight,
                             uint256 timestamp
                         )
                         pure
@@ -345,7 +345,7 @@ contract FlightSuretyApp {
                                 address account         
                             )
                             internal
-                            returns(uint8[3])
+                            returns(uint8[3] memory)
     {
         uint8[3] memory indexes;
         indexes[0] = getRandomIndex(account);

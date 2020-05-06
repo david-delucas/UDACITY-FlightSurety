@@ -1,4 +1,4 @@
-pragma solidity ^0.4.25;
+pragma solidity ^0.6.0;
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
@@ -53,7 +53,7 @@ contract FlightSuretyData {
     public
     {
         contractOwner = msg.sender;
-        airlines[firstAirline] = Airline(firstAirline, AirlineState.Registered, "First Airline", 0, 0);
+        airlines[firstAirline] = Airline(firstAirline, AIRLINE_STATE_REGISTERED, "First Airline", 0, new address[](0), 0);
         operational = true;
     }
 
@@ -139,8 +139,13 @@ contract FlightSuretyData {
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
+    uint AIRLINE_STATE_NOT_REGISTERED = 0;
+    uint AIRLINE_STATE_APPLIED = 1;
+    uint AIRLINE_STATE_REGISTERED = 2;
+    uint AIRLINE_STATE_PAID = 3;
 
     enum AirlineState {
+        NotRegistered,
         Applied,
         Registered,
         Paid
@@ -148,21 +153,21 @@ contract FlightSuretyData {
 
     struct Airline {
         address airlineAddress;
-        AirlineState state;
+        uint state;
         string name;
         uint256 funds;
-        mapping(address => bool) approvals;
-        uint8 approvalCount;
+        address[] approvals;
+        uint approvalsCount;
     }
 
     mapping(address => Airline) internal airlines;
-    uint256 internal totalPaidAirlines = 0;
+    uint internal totalPaidAirlines = 0;
 
     function getAirlineState(address airline)
     external
     view
     requireCallerAuthorized
-    returns (AirlineState)
+    returns (uint)
     {
         return airlines[airline].state;
     }
@@ -172,17 +177,18 @@ contract FlightSuretyData {
     external
     view
     requireCallerAuthorized
-    returns (uint256)
+    returns (uint)
     {
         return totalPaidAirlines;
     }
 
 
 
-    function setAirlaneStatus(address account, AirlineState mode) internal{
+    function setAirlaneStatus(address account, uint mode) internal{
+        uint old_status = airlines[account].state;
         airlines[account].state = mode;
-        if(mode == AirlineState.Paid) totalPaidAirlines += 1;
-        else totalPaidAirlines -= 1;
+        if(mode == AIRLINE_STATE_PAID) totalPaidAirlines += 1;
+        if( ( old_status == AIRLINE_STATE_PAID ) && ( mode != AIRLINE_STATE_PAID ) ) totalPaidAirlines -= 1;
         emit AirlineStatusChanged(account);
     }
 
@@ -190,24 +196,22 @@ contract FlightSuretyData {
 
     function isActive(address airline) public view returns (bool) {
         return (
-            airlines[airline].state  == AirlineState.Registered ||
-            airlines[airline].state  == AirlineState.Paid
+            airlines[airline].state  == AIRLINE_STATE_REGISTERED ||
+            airlines[airline].state  == AIRLINE_STATE_PAID
         );
     }
 
 
     function isRegistered(address airline) public view returns (bool) {
-            airlines[airline].state  == AirlineState.Registered;
+            airlines[airline].state  == AIRLINE_STATE_REGISTERED;
     }
 
     function isPaid(address airline) public view returns (bool) {
-        return airlines[airline].state  == AirlineState.Paid;
+        return airlines[airline].state  == AIRLINE_STATE_PAID;
     }
 
     function addAirline(address account, string memory name) internal {
-        airlines[account].airlineAddress=account;
-        airlines[account].state=AirlineState.Registered;
-        airlines[account].name=name;
+        airlines[account] = Airline(account, AIRLINE_STATE_REGISTERED, name, 0, new address[](0), 0);
         emit AirlineAdded(account);
     }
 
@@ -220,22 +224,34 @@ contract FlightSuretyData {
 
     // Define a function 'isAirline' to check this role
     function isAirline(address account) public view returns (bool) {
-        return airlines[account].airlineAddress > 0 ;
+        return airlines[account].airlineAddress != address(0) ; 
+       /*    return (   airlines[account].state  == AIRLINE_STATE_REGISTERED ||
+            airlines[account].state  == AIRLINE_STATE_PAID ||
+            airlines[account].state  == AIRLINE_STATE_APPLIED );*/
     }
 
-    address[] multiCalls = new address[](0);
 
-    function getMultiCallsCount()
+    function getMultiCallsCount(address account)
     internal
-    returns (uint256)
+    view
+    returns (uint)
     {
-        return multiCalls.length;
+        return airlines[account].approvalsCount;
     }
 
 
-    function pushToMultiCalls(address account) internal{
-        multiCalls.push(account);    
-        emit MultiCallStatusChanged(account);
+    function pushToMultiCalls(address account, address callerAccount,string memory name) internal {
+        if ( isAirline(account) ) {
+            airlines[account].approvals.push(callerAccount);
+            airlines[account].approvalsCount += 1;
+            emit MultiCallStatusChanged(account);
+            //return 1;
+        } else {
+            airlines[account] = Airline(account, 111111 + AIRLINE_STATE_APPLIED, name, 0, new address[](0), 1);
+            airlines[account].approvals.push(callerAccount);
+            emit AirlineAdded(account);
+            //return 2;
+        }
     }
 
 
@@ -248,73 +264,58 @@ contract FlightSuretyData {
     (
         address newAirline,
         address callerAirline,
-        string name
+        string calldata name
     )
     external
     requireIsOperational
     requireIsCallerAuthorized
-    returns (bool success, uint256 votes, uint256 _totalPaidAirlines, uint256 Majority) 
+    returns (bool success, uint256 votes, uint _totalPaidAirlines, uint256 Majority, uint exist) 
     {
-        require(isAirline(callerAirline), "Caller is not an Airline");
+        uint _exist = 0;
+        uint _exist2 = 0;
+        //require(isAirline(callerAirline), "Caller is not an Airline");
         require(isActive(callerAirline), "Caller is not an active Airline");
         require(isPaid(callerAirline), "Caller is not a funded Airline");
         require(!isAirline(newAirline), "New Airline is already registered");
         if (totalPaidAirlines < 4) {
             addAirline(newAirline, callerAirline, name);
-            return (true, 0, totalPaidAirlines, 0);
+            return (true, 0, totalPaidAirlines, 0, _exist);
         } else {
             bool isDuplicate = false;
             Majority = totalPaidAirlines.div(2);
-            for (uint c = 0; c < multiCalls.length; c++) {
-                if (multiCalls[c] == callerAirline) {
+            if (isAirline(newAirline)) {
+                _exist +=airlines[callerAirline].state;
+                _exist +=airlines[newAirline].state;
+            }
+            for (uint c = 0; c <  getMultiCallsCount(newAirline); c++) {
+                _exist +=10;
+                if (airlines[newAirline].approvals[c] == callerAirline) {
                     isDuplicate = true;
+                    _exist +=100;
                     break;
                 }
             }
             require(!isDuplicate, "Airline has already called this function.");
-            pushToMultiCalls(callerAirline);
+            pushToMultiCalls(newAirline,callerAirline, name);
+
+            if (isAirline(newAirline)) {
+                _exist +=airlines[callerAirline].state;
+                _exist +=airlines[newAirline].state;
+            }
+
+
+            votes = getMultiCallsCount(newAirline);            
             //multiCalls.push(callerAirline);
-            if (multiCalls.length >= Majority) {
+            if (votes >= Majority) {
                 addAirline(newAirline, callerAirline, name);
-                multiCalls = new address[](0);
-                return (true, votes, totalPaidAirlines, Majority);
+                return (true, votes, totalPaidAirlines, Majority, _exist);
             }
         }
-        votes = getMultiCallsCount();
-        return (false, votes, totalPaidAirlines, Majority);
+        return (false, votes, totalPaidAirlines, Majority, _exist);
     }
 
-/*
-        require(flightSuretyData.isAirlineRegistered(msg.sender), "Caller is not a registered.");
-        require(flightSuretyData.isAirlineFunded(msg.sender), "Airline is not funded.");
-        require(!flightSuretyData.isAirlineRegistered(_airline), "Airline is already a registered.");
-
-        uint noOfRegisteredAirlines = flightSuretyData.getNoOfRegisteredAirlines();
-        
-        if (noOfRegisteredAirlines >= M) {
-            bool isDuplicate = false;
-            for (uint c = 0; c < flightSuretyData.getMultiCallsLength(); c++) {
-                if (flightSuretyData.getMultiCallsItem(c) == msg.sender) {
-                    isDuplicate = true;
-                    break;
-                }
-            }
-            require(!isDuplicate, "Caller has already called this function.");
-
-            flightSuretyData.setMultiCallsItem(msg.sender);
-
-            if (flightSuretyData.getMultiCallsLength() >= noOfRegisteredAirlines.div(2)) {// 50%
-                flightSuretyData.clearMultiCalls();
-                flightSuretyData.registerAirline(_airline);
-            }
-        } else {
-            flightSuretyData.registerAirline(_airline);
-        }
-
-        return (success, 0);
-*/
-
-    function activateAirline(address account, AirlineState mode)
+    function activateAirline(address account, uint mode)
+    public
     requireIsOperational
     requireIsCallerAuthorized
     returns (bool success){
@@ -326,7 +327,7 @@ contract FlightSuretyData {
     function registerFlight
     (
         address _airline,
-        string _flight,
+        string calldata _flight,
         uint256 _timestamp
     )
     external
@@ -401,7 +402,7 @@ contract FlightSuretyData {
     {
         airlines[_airline].funds = airlines[_airline].funds.add(_fund);
         if (airlines[_airline].funds >= 10 ) {
-            setAirlaneStatus(_airline, AirlineState.Paid);
+            setAirlaneStatus(_airline, AIRLINE_STATE_PAID);
         }
     }
 
@@ -424,12 +425,21 @@ contract FlightSuretyData {
     * @dev Fallback function for funding smart contract.
     *
     */
-    function() 
+    fallback() 
                             external 
                             payable 
+                            
     {
         contractFunds = contractFunds.add(msg.value);
     }
+    receive() 
+                            external 
+                            payable 
+                            
+    {
+        contractFunds = contractFunds.add(msg.value);
+    }
+
 
 
 }
